@@ -13,7 +13,7 @@ pipeline {
         stage('Clone Repository') {
             steps {
                 git branch: 'main',
-                    url: 'https://github.com/YOUR_USERNAME/Django-Jenkins-CI-CD.git'
+                    url: 'https://github.com/Thilakeshaws27/Django-jen.git'
             }
         }
 
