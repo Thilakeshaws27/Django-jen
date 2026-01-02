@@ -1,11 +1,15 @@
 pipeline {
     agent any
 
+    options {
+        skipDefaultCheckout(true)
+    }
+
     environment {
         APP_DIR     = "/home/ubuntu/django-app"
         VENV_DIR    = "venv"
-        DJANGO_EC2  = "ubuntu@13.232.183.201"
-        DJANGO_SETTINGS_MODULE = "myproject.settings"
+        DJANGO_EC2  = "ubuntu@172.31.0.99"
+        DJANGO_SETTINGS_MODULE = "myweb.settings"
     }
 
     stages {
@@ -40,13 +44,10 @@ pipeline {
         stage('Deploy to Django EC2') {
             steps {
                 sh '''
-                # Ensure app directory exists
                 ssh ${DJANGO_EC2} "mkdir -p ${APP_DIR}"
 
-                # Copy Django project files (NO venv)
-                scp -r manage.py requirements.txt myproject apps dev_django.sh ${DJANGO_EC2}:${APP_DIR}
+                scp -r manage.py requirements.txt myweb app1 app4 dev_django.sh ${DJANGO_EC2}:${APP_DIR}
 
-                # Install dependencies and deploy
                 ssh ${DJANGO_EC2} "
                   cd ${APP_DIR} &&
                   rm -rf venv &&
