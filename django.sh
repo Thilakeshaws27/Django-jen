@@ -1,6 +1,7 @@
 #!/bin/bash
 
-APP_DIR="/home/ubuntu/django-app"
+
+APP_DIR="/home/ubuntu/myweb"
 VENV_DIR="venv"
 PORT="8000"
 LOG_FILE="django.log"
