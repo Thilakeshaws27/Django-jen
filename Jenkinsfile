@@ -2,74 +2,128 @@ pipeline {
     agent any
 
     environment {
-        EC2_USER = "ubuntu"
-        EC2_HOST = "172.31.0.99"
-        APP_DIR  = "/home/ubuntu/django-app"
-        DJANGO_SETTINGS_MODULE = "myweb.settings"
-        STATIC_ROOT = "/home/ubuntu/django-app/staticfiles"
+        VENV = "venv"
     }
 
     stages {
 
         stage('Clone Repository') {
             steps {
-                git url: 'https://github.com/Thilakeshaws27/Django-jen.git', branch: 'main'
+                git branch: 'main',
+                    url: 'https://github.com/Thilakeshaws27/Django-jen.git'
             }
         }
 
-        stage('Install Dependencies (Jenkins Test)') {
+        stage('Setup Virtual Environment') {
             steps {
                 sh '''
-                python3 -m venv venv
-                . venv/bin/activate
+                python3 -m venv $VENV
+                . $VENV/bin/activate
                 pip install --upgrade pip
                 pip install -r requirements.txt
                 '''
             }
         }
 
-        stage('Run Django Basic Test') {
+        stage('Django Checks') {
             steps {
                 sh '''
-                . venv/bin/activate
+                . $VENV/bin/activate
                 python manage.py check
                 '''
             }
         }
 
-        stage('Deploy to Django EC2') {
+        stage('Migrate') {
             steps {
-                sh """
-                ssh ${EC2_USER}@${EC2_HOST} 'mkdir -p ${APP_DIR}'
+                sh '''
+                . $VENV/bin/activate
+                python manage.py migrate
+                '''
+            }
+        }
 
-                scp -r manage.py requirements.txt myweb app1 app4 dev_django.sh \
-                    ${EC2_USER}@${EC2_HOST}:${APP_DIR}
-
-                ssh ${EC2_USER}@${EC2_HOST} '
-                    cd ${APP_DIR} &&
-                    rm -rf venv &&
-                    python3 -m venv venv &&
-                    . venv/bin/activate &&
-                    pip install --upgrade pip &&
-                    pip install -r requirements.txt &&
-                    export DJANGO_SETTINGS_MODULE=${DJANGO_SETTINGS_MODULE} &&
-                    export STATIC_ROOT=${STATIC_ROOT} &&
-                    python manage.py migrate &&
-                    python manage.py collectstatic --noinput &&
-                    chmod +x dev_django.sh &&
-                    ./dev_django.sh restart
-                '
-                """
+        stage('Restart App') {
+            steps {
+                echo "Restarting Django app (manual or via gunicorn)"
             }
         }
     }
-
-    post {
-        success {
-            echo "✅ Deployment completed successfully"
-        }
-        failure {
-            echo "❌ Deployment failed"
-        }
-    }
 }
+
+
+// pipeline {
+//     agent { label 'django-slave' }  // Runs all stages on the slave
+
+//     environment {
+//         PROJECT_DIR = "/home/jenkins/myweb"   // Your Django project folder on slave
+//         VENV_DIR    = "/home/jenkins/venv"    // Virtual environment path
+//     }
+
+//     stages {
+
+//         stage('Clone or Update Repository') {
+//             steps {
+//                 sh '''
+//                 if [ ! -d "$PROJECT_DIR" ]; then
+//                     git clone https://github.com/USERNAME/REPO_NAME.git $PROJECT_DIR
+//                 else
+//                     cd $PROJECT_DIR && git pull origin main
+//                 fi
+//                 '''
+//             }
+//         }
+
+//         stage('Setup Virtual Environment') {
+//             steps {
+//                 sh '''
+//                 python3 -m venv $VENV_DIR
+//                 . $VENV_DIR/bin/activate
+//                 pip install --upgrade pip
+//                 pip install -r $PROJECT_DIR/requirements.txt
+//                 '''
+//             }
+//         }
+
+//         stage('Run Django Checks') {
+//             steps {
+//                 sh '''
+//                 . $VENV_DIR/bin/activate
+//                 cd $PROJECT_DIR
+//                 python manage.py check
+//                 '''
+//             }
+//         }
+
+//         stage('Run Migrations & Collect Static') {
+//             steps {
+//                 sh '''
+//                 . $VENV_DIR/bin/activate
+//                 cd $PROJECT_DIR
+//                 python manage.py migrate
+//                 python manage.py collectstatic --noinput
+//                 '''
+//             }
+//         }
+
+//         stage('Restart Services') {
+//             steps {
+//                 sh '''
+//                 # Restart Gunicorn and Nginx
+//                 sudo systemctl restart gunicorn
+//                 sudo systemctl restart nginx
+//                 '''
+//             }
+//         }
+//     }
+
+//     post {
+//         success {
+//             echo "✅ Django app deployed successfully on the slave!"
+//         }
+//         failure {
+//             echo "❌ Deployment failed. Check logs."
+//         }
+//     }
+// }
+// '''
