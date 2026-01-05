@@ -5,7 +5,7 @@ pipeline {
         APP_DIR     = "/home/ubuntu/myweb"     // Change as needed on slave
         VENV_DIR    = "venv"
         DJANGO_PORT = "8000"
-        DJANGO_EC2  = "ubuntu@3.109.210.1"   // Change to your slave IP
+        DJANGO_EC2  = "ubuntu@172.31.15.22"   // Change to your slave IP
     }
 
     stages {
