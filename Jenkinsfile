@@ -1,78 +1,73 @@
 pipeline {
-    agent any  // Runs on Jenkins master
+    agent any
 
     environment {
-        SLAVE_USER  = "ubuntu"
-        SLAVE_IP    = "3.109.210.1"                  // Replace with your slave EC2 public IP
-        PROJECT_DIR = "/home/ubuntu/myweb"          // Django app path on slave
-        VENV_DIR    = "/home/ubuntu/venv"           // Virtual environment path
-        REPO_URL    = "https://github.com/Thilakeshaws27/Django-jen.git"
+        APP_DIR     = "/home/ubuntu/myweb"     // Change as needed on slave
+        VENV_DIR    = "venv"
+        DJANGO_PORT = "8000"
+        DJANGO_EC2  = "ubuntu@3.109.210.1"   // Change to your slave IP
     }
 
     stages {
 
-        stage('Build on Master (Optional)') {
+        stage('Clone Repository') {
             steps {
-                echo "✅ Preparing to deploy Django app to slave EC2..."
+                git branch: 'main',
+                    url: 'https://github.com/Thilakeshaws27/Django-jen.git'
             }
         }
 
-        stage('Deploy to Slave EC2') {
+        stage('Install Dependencies (Jenkins)') {
             steps {
-                sh """
-                ssh -o StrictHostKeyChecking=no ${SLAVE_USER}@${SLAVE_IP} '
-                    echo "📂 Ensuring project directory exists..."
-                    mkdir -p ${PROJECT_DIR}
-
-                    # Clone or pull latest repo
-                    if [ ! -d "${PROJECT_DIR}/.git" ]; then
-                        git clone ${REPO_URL} ${PROJECT_DIR}
-                    else
-                        cd ${PROJECT_DIR} && git reset --hard && git pull origin main
-                    fi
-
-                    echo "🐍 Setting up Python virtual environment..."
-                    python3 -m venv ${VENV_DIR}
-                    . ${VENV_DIR}/bin/activate
-                    pip install --upgrade pip
-                    pip install -r ${PROJECT_DIR}/requirements.txt
-
-                    echo "🛠 Running migrations..."
-                    cd ${PROJECT_DIR}
-                    python manage.py migrate
-
-                    echo "📦 Collecting static files..."
-                    # Ensure STATIC_ROOT exists before collectstatic
-                    mkdir -p ${PROJECT_DIR}/staticfiles
-                    python manage.py collectstatic --noinput
-
-                    echo "🔄 Restarting Gunicorn if exists..."
-                    if systemctl list-units --full -all | grep -Fq "gunicorn.service"; then
-                        sudo systemctl restart gunicorn
-                    else
-                        echo "⚠ Gunicorn service not found, skipping restart."
-                    fi
-
-                    echo "🔄 Restarting Nginx if exists..."
-                    if systemctl list-units --full -all | grep -Fq "nginx.service"; then
-                        sudo systemctl restart nginx
-                    else
-                        echo "⚠ Nginx service not found, skipping restart."
-                    fi
-
-                    echo "✅ Deployment completed on slave EC2!"
-                '
-                """
+                sh '''
+                python3 -m venv ${VENV_DIR}
+                . ${VENV_DIR}/bin/activate
+                pip install --upgrade pip
+                pip install -r requirements.txt
+                '''
             }
         }
-    }
 
-    post {
-        success {
-            echo "🎉 Django app deployed successfully to slave EC2!"
+        stage('Django Checks') {
+            steps {
+                sh '''
+                . ${VENV_DIR}/bin/activate
+                python manage.py check
+                '''
+            }
         }
-        failure {
-            echo "❌ Deployment failed! Check Jenkins logs and slave EC2 configuration."
+
+        stage('Run Migrations (Jenkins Test)') {
+            steps {
+                sh '''
+                . ${VENV_DIR}/bin/activate
+                python manage.py migrate --noinput
+                '''
+            }
+        }
+
+        stage('Deploy to Django EC2') {
+            steps {
+                sh '''
+                ssh -o StrictHostKeyChecking=no ${DJANGO_EC2} "mkdir -p ${APP_DIR}"
+
+                # Copy project folders and files to slave
+                scp -o StrictHostKeyChecking=no -r \
+                    app1 app4 myweb manage.py requirements.txt django.sh \
+                    ${DJANGO_EC2}:${APP_DIR}
+
+                ssh -o StrictHostKeyChecking=no ${DJANGO_EC2} "
+                    cd ${APP_DIR} &&
+                    rm -rf ${VENV_DIR} &&
+                    python3 -m venv ${VENV_DIR} &&
+                    . ${VENV_DIR}/bin/activate &&
+                    pip install --upgrade pip &&
+                    pip install -r requirements.txt &&
+                    chmod +x django.sh &&
+                    ./django.sh
+                "
+                '''
+            }
         }
     }
 }
