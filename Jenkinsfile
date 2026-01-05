@@ -1,129 +1,59 @@
 pipeline {
-    agent any
+    agent any  // Runs on Jenkins master
 
     environment {
-        VENV = "venv"
+        SLAVE_USER = "ubuntu"
+        SLAVE_IP   = "3.109.210.1"              // Replace with your slave EC2 public IP
+        PROJECT_DIR = "/home/ubuntu/myweb"      // Path on slave EC2
+        VENV_DIR    = "/home/ubuntu/venv"       // Virtual environment on slave
+        REPO_URL    = "https://github.com/Thilakeshaws27/Django-jen.git"
     }
 
     stages {
 
-        stage('Clone Repository') {
+        stage('Build on Master (Optional)') {
             steps {
-                git branch: 'main',
-                    url: 'https://github.com/Thilakeshaws27/Django-jen.git'
+                echo "Building on master (optional) or just preparing SSH deploy..."
             }
         }
 
-        stage('Setup Virtual Environment') {
+        stage('Deploy to Slave EC2') {
             steps {
-                sh '''
-                python3 -m venv $VENV
-                . $VENV/bin/activate
-                pip install --upgrade pip
-                pip install -r requirements.txt
-                '''
-            }
-        }
+                sh """
+                ssh ${SLAVE_USER}@${SLAVE_IP} '
+                    # Clone or pull the repo
+                    if [ ! -d "${PROJECT_DIR}" ]; then
+                        git clone ${REPO_URL} ${PROJECT_DIR}
+                    else
+                        cd ${PROJECT_DIR} && git pull origin main
+                    fi
 
-        stage('Django Checks') {
-            steps {
-                sh '''
-                . $VENV/bin/activate
-                python manage.py check
-                '''
-            }
-        }
+                    # Setup virtual environment
+                    python3 -m venv ${VENV_DIR}
+                    . ${VENV_DIR}/bin/activate
+                    pip install --upgrade pip
+                    pip install -r ${PROJECT_DIR}/requirements.txt
 
-        stage('Migrate') {
-            steps {
-                sh '''
-                . $VENV/bin/activate
-                python manage.py migrate
-                '''
-            }
-        }
+                    # Django migrations & collectstatic
+                    cd ${PROJECT_DIR}
+                    python manage.py migrate
+                    python manage.py collectstatic --noinput
 
-        stage('Restart App') {
-            steps {
-                echo "Restarting Django app (manual or via gunicorn)"
+                    # Restart Gunicorn and Nginx
+                    sudo systemctl restart gunicorn
+                    sudo systemctl restart nginx
+                '
+                """
             }
         }
     }
+
+    post {
+        success {
+            echo "✅ Django app deployed successfully to slave EC2!"
+        }
+        failure {
+            echo "❌ Deployment failed! Check SSH and logs."
+        }
+    }
 }
-
-
-// pipeline {
-//     agent { label 'django-slave' }  // Runs all stages on the slave
-
-//     environment {
-//         PROJECT_DIR = "/home/jenkins/myweb"   // Your Django project folder on slave
-//         VENV_DIR    = "/home/jenkins/venv"    // Virtual environment path
-//     }
-
-//     stages {
-
-//         stage('Clone or Update Repository') {
-//             steps {
-//                 sh '''
-//                 if [ ! -d "$PROJECT_DIR" ]; then
-//                     git clone https://github.com/USERNAME/REPO_NAME.git $PROJECT_DIR
-//                 else
-//                     cd $PROJECT_DIR && git pull origin main
-//                 fi
-//                 '''
-//             }
-//         }
-
-//         stage('Setup Virtual Environment') {
-//             steps {
-//                 sh '''
-//                 python3 -m venv $VENV_DIR
-//                 . $VENV_DIR/bin/activate
-//                 pip install --upgrade pip
-//                 pip install -r $PROJECT_DIR/requirements.txt
-//                 '''
-//             }
-//         }
-
-//         stage('Run Django Checks') {
-//             steps {
-//                 sh '''
-//                 . $VENV_DIR/bin/activate
-//                 cd $PROJECT_DIR
-//                 python manage.py check
-//                 '''
-//             }
-//         }
-
-//         stage('Run Migrations & Collect Static') {
-//             steps {
-//                 sh '''
-//                 . $VENV_DIR/bin/activate
-//                 cd $PROJECT_DIR
-//                 python manage.py migrate
-//                 python manage.py collectstatic --noinput
-//                 '''
-//             }
-//         }
-
-//         stage('Restart Services') {
-//             steps {
-//                 sh '''
-//                 # Restart Gunicorn and Nginx
-//                 sudo systemctl restart gunicorn
-//                 sudo systemctl restart nginx
-//                 '''
-//             }
-//         }
-//     }
-
-//     post {
-//         success {
-//             echo "✅ Django app deployed successfully on the slave!"
-//         }
-//         failure {
-//             echo "❌ Deployment failed. Check logs."
-//         }
-//     }
-// }
-// '''
